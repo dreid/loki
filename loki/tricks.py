@@ -1,14 +1,25 @@
-def fail(request, response=None, status=500):
-    print status
-    request.setResponseCode(status)
-    request.finish()
+# Request tricks
 
 
-def missing_headers(request, response, headers=None):
-    for header in headers or []:
+def strip_request_headers(request, headers=None):
+    for header in headers:
+        request.requestHeaders.removeHeader(header)
+
+    request.responseHeaders.addRawHeader('x-loki-stripped-request-headers', ','.join(headers))
+
+
+#response tricks
+
+def add_content_encoding(request, response, contentEncoding=None):
+    request.responseHeaders.addRawHeader('content-encoding', contentEncoding)
+
+
+def strip_response_headers(request, response, headers=None):
+    for header in headers:
+        request.responseHeaders.removeHeader(header)
         response.headers.removeHeader(header)
 
-    return response
+    request.responseHeaders.addRawHeader('x-loki-stripped-response-headers', ','.join(headers))
 
 #
 # Implementation
@@ -37,18 +48,20 @@ class Trick(object):
         return self._trick(*args, **self.kwargs)
 
 
-def make_tricks(trickDict):
-    for regex, trick in trickDict.iteritems():
-        yield Trick(regex, trick['probability'], trick['trick'], trick['args'])
+def make_tricks(tricks):
+    for trick in tricks or []:
+        yield Trick(trick['regex'], trick['probability'], trick['trick'], trick['args'])
 
 
 def load_tricks(stream):
     tricks = yaml.load(stream)
 
-    requestTricks = tricks.get('request', {})
-    requestTrickObjects = list(make_tricks(requestTricks))
+    sortP = lambda t: t.probability
 
-    responseTricks = tricks.get('response', {})
-    responseTrickObjects = list(make_tricks(responseTricks))
+    requestTricks = tricks.get('request')
+    requestTrickObjects = list(sorted(make_tricks(requestTricks), key=sortP))
+
+    responseTricks = tricks.get('response')
+    responseTrickObjects = list(sorted(make_tricks(responseTricks), key=sortP))
 
     return (requestTrickObjects, responseTrickObjects)

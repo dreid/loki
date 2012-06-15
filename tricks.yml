@@ -1,20 +1,17 @@
 request:
-  '.*':
-    probability: 0.0
-    trick: 'loki.tricks.fail'
-    args:
-      status: 500
-  'http://.*':
-    probability: 0.0
-    trick: 'loki.tricks.fail'
-    args:
-      status: 404
-
 
 response:
-  'http://google.com':
+  - regex: '.*'
     probability: 0.5
-    trick: 'loki.tricks.missing_headers'
+    trick: 'loki.tricks.strip_response_headers'
     args:
       headers:
-        - 'transfer-encoding'
+        - 'server'
+        - 'content-type'
+        - 'date'
+  - regex: '.*'
+    probability: 0.6
+    trick: 'loki.tricks.add_content_encoding'
+    args:
+      contentEncoding: gzip
+
