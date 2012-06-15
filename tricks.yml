@@ -1,0 +1,20 @@
+request:
+  '.*':
+    probability: 0.0
+    trick: 'loki.tricks.fail'
+    args:
+      status: 500
+  'http://.*':
+    probability: 0.0
+    trick: 'loki.tricks.fail'
+    args:
+      status: 404
+
+
+response:
+  'http://google.com':
+    probability: 0.5
+    trick: 'loki.tricks.missing_headers'
+    args:
+      headers:
+        - 'transfer-encoding'
