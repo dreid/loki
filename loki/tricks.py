@@ -1,5 +1,12 @@
-# Request tricks
+from twisted.internet import reactor
+from twisted.internet.task import deferLater
 
+
+def delay_response(*args, **kwargs):
+    return deferLater(reactor, kwargs['delay'], lambda: None)
+
+
+# Request tricks
 
 def strip_request_headers(request, headers=None):
     for header in headers:
@@ -29,6 +36,7 @@ import re
 import yaml
 import random
 from twisted.python.reflect import namedAny
+from twisted.internet.defer import maybeDeferred
 
 
 class Trick(object):
@@ -42,10 +50,16 @@ class Trick(object):
 
     def match(self, url):
         return (self._regex.match(url) != None and
-                random.uniform(0, 1) < self.probability)
+                random.uniform(0, 1) <= self.probability)
 
     def apply(self, *args):
-        return self._trick(*args, **self.kwargs)
+        return maybeDeferred(self._trick, *args, **self.kwargs)
+
+    def __repr__(self):
+        return '<%s: trick=%s>' % (
+            self.__class__.__name__,
+            self._trick
+        )
 
 
 def make_tricks(tricks):
@@ -56,12 +70,14 @@ def make_tricks(tricks):
 def load_tricks(stream):
     tricks = yaml.load(stream)
 
-    sortP = lambda t: t.probability
+    sortP = lambda t: -t.probability
 
     requestTricks = tricks.get('request')
     requestTrickObjects = list(sorted(make_tricks(requestTricks), key=sortP))
+    print requestTrickObjects
 
     responseTricks = tricks.get('response')
     responseTrickObjects = list(sorted(make_tricks(responseTricks), key=sortP))
+    print responseTrickObjects
 
     return (requestTrickObjects, responseTrickObjects)

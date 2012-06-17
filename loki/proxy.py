@@ -5,7 +5,6 @@ from twisted.internet.defer import Deferred
 from twisted.internet.protocol import Protocol
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
-from twisted.web.client import IResponse
 from twisted.web.client import Agent, HTTPConnectionPool, FileBodyProducer
 from twisted.python import log
 
@@ -62,11 +61,7 @@ class TrickProxyResource(Resource):
 
         return (random_trick(self.requestTricks), random_trick(self.responseTricks))
 
-    def _handle_response(self, response, request, responseTrick):
-        if responseTrick:
-            responseTrick.apply(request, response)
-            add_trick_header(request, responseTrick)
-
+    def _write_response(self, response, request):
         request.setResponseCode(response.code)
 
         for header, values in response.headers.getAllRawHeaders():
@@ -76,19 +71,42 @@ class TrickProxyResource(Resource):
         response.deliverBody(rwp)
         return rwp.d
 
+    def _handle_response(self, response, request, responseTrick):
+        if responseTrick:
+            d = responseTrick.apply(request, response)
+            d.addCallback(lambda _: add_trick_header(request, responseTrick))
+            d.addCallback(lambda _: response)
+            return d
+
+        return response
+
+    def _proxy_request(self, request, req_url, responseTrick):
+        d = self.agent.request(request.method, req_url, request.requestHeaders,
+                               FileBodyProducer(request.content))
+        d.addCallback(self._handle_response, request, responseTrick)
+        d.addCallback(self._write_response, request)
+        d.addErrback(log.err)
+        d.addBoth(lambda _: request.finish())
+
+        return d
+
     def render(self, request):
         req_url = url(request)
         (requestTrick, responseTrick) = self.selectTricks(req_url)
 
-        if requestTrick:
-            requestTrick.apply(request)
-            add_trick_header(request, requestTrick)
+        log.msg(
+            format="Applying %(requestTrick)s and %(responseTrick)s to %(request)s.",
+            request=request,
+            requestTrick=requestTrick,
+            responseTrick=responseTrick
+        )
 
-        if not request.finished:
-            d = self.agent.request(request.method, req_url, request.requestHeaders,
-                                   FileBodyProducer(request.content))
-            d.addCallback(self._handle_response, request, responseTrick)
-            d.addErrback(log.err)
-            d.addBoth(lambda _: request.finish())
+        if requestTrick:
+            rd = requestTrick.apply(request)
+            rd.addCallback(lambda _: add_trick_header(request, requestTrick))
+            rd.addCallback(lambda _: self._proxy_request(request, req_url, responseTrick))
+            rd.addErrback(log.err)
+        else:
+            self._proxy_request(request, req_url, responseTrick)
 
         return NOT_DONE_YET

@@ -9,9 +9,8 @@ response:
         - 'server'
         - 'content-type'
         - 'date'
-  - regex: '.*'
-    probability: 0.6
-    trick: 'loki.tricks.add_content_encoding'
+  - regex: '.*google.com/search\?q=.*'
+    probability: 1.0
+    trick: 'loki.tricks.delay_response'
     args:
-      contentEncoding: gzip
-
+      delay: 10

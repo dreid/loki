@@ -2,7 +2,7 @@ from twisted.web import server
 from twisted.python import usage
 from twisted.application import strports
 
-from loki.web import TrickProxyResource
+from loki.proxy import TrickProxyResource
 from loki.tricks import load_tricks
 
 
