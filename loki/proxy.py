@@ -8,6 +8,8 @@ from twisted.web.server import NOT_DONE_YET
 from twisted.web.client import Agent, HTTPConnectionPool, FileBodyProducer
 from twisted.python import log
 
+from loki.requestlog import publish
+
 
 def url(req):
     if not req.uri.startswith('/'):
@@ -69,21 +71,24 @@ class TrickProxyResource(Resource):
 
         rwp = RequestWriter(request)
         response.deliverBody(rwp)
+        rwp.d.addCallback(lambda _: response)
         return rwp.d
 
-    def _handle_response(self, response, request, responseTrick):
+    def _handle_response(self, response, request, requestTrick, responseTrick):
         if responseTrick:
             d = responseTrick.apply(request, response)
             d.addCallback(lambda _: add_trick_header(request, responseTrick))
+            d.addCallback(lambda _: publish((request, response, (requestTrick, responseTrick))))
             d.addCallback(lambda _: response)
             return d
 
+        publish((request, response, (requestTrick, responseTrick)))
         return response
 
-    def _proxy_request(self, request, req_url, responseTrick):
+    def _proxy_request(self, request, req_url, requestTrick, responseTrick):
         d = self.agent.request(request.method, req_url, request.requestHeaders,
                                FileBodyProducer(request.content))
-        d.addCallback(self._handle_response, request, responseTrick)
+        d.addCallback(self._handle_response, request, requestTrick, responseTrick)
         d.addCallback(self._write_response, request)
         d.addErrback(log.err)
         d.addBoth(lambda _: request.finish())
@@ -104,9 +109,9 @@ class TrickProxyResource(Resource):
         if requestTrick:
             rd = requestTrick.apply(request)
             rd.addCallback(lambda _: add_trick_header(request, requestTrick))
-            rd.addCallback(lambda _: self._proxy_request(request, req_url, responseTrick))
+            rd.addCallback(lambda _: self._proxy_request(request, req_url, requestTrick, responseTrick))
             rd.addErrback(log.err)
         else:
-            self._proxy_request(request, req_url, responseTrick)
+            self._proxy_request(request, req_url, requestTrick, responseTrick)
 
         return NOT_DONE_YET

@@ -13,4 +13,4 @@ response:
     probability: 1.0
     trick: 'loki.tricks.delay_response'
     args:
-      delay: 10
+      delay: 2
